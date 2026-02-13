@@ -7,19 +7,19 @@
 #define GRIPPER_PIN (1 << 3)   // A3
 
 // Constrain limits for the 4 servos
-#define BASE_MIN 0
+#define BASE_MIN 5
 #define BASE_MAX 180
 #define SHOULDER_MIN 70
 #define SHOULDER_MAX 170
 #define ELBOW_MIN 0
-#define ELBOW_MAX 95
+#define ELBOW_MAX 90
 #define GRIPPER_MIN 80
 #define GRIPPER_MAX 95
 
 char c = '\u0000';
 int basePos = 90, shoulderPos = 90, elbowPos = 90, gripperPos = 90;
 volatile int msPerDeg = 10;
-volatile uint8_t currPin = 0;
+volatile uint8_t currPin = 0; // Currently active servo pin binary mask
 
 // Helper to convert angle to ticks (0.5us resolution)
 // 0 deg = 1000 ticks (0.5ms), 180 deg = 5000 ticks (2.5ms)
@@ -148,6 +148,8 @@ void loop() {
     Serial.print("Setting velocity to ");
     Serial.println(val);
     msPerDeg = val;
+    msPerDeg = constrain(val, 5, 100);
+    // msPerDeg = val;
     return;
   } else {
     if (c == 'B') {
