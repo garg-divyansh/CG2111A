@@ -23,6 +23,20 @@ import sys
 import select
 from second_terminal.packets import *
 from second_terminal import relay
+import tty
+import termios
+import atexit
+
+_fd = sys.stdin.fileno()
+_old_settings = termios.tcgetattr(_fd)
+
+def enableRawMode():
+    tty.setcbreak(_fd)
+
+def disableRawMode():
+    termios.tcsetattr(_fd, termios.TCSADRAIN, _old_settings)
+
+atexit.register(disableRawMode)
 
 # ----------------------------------------------------------------
 # SERIAL PORT SETUP
@@ -303,6 +317,12 @@ def handleMoveCommand(line):
         return
     sendCommand(COMMAND_MOVE, data=line.encode('ascii'))
 
+def getKey():
+    rlist, _, _ = select.select([sys.stdin], [], [], 0)
+    if rlist:
+        return sys.stdin.read(1)
+    return None
+
 def handleUserInput(line):
     """
     Dispatch a single line of user input.
@@ -314,10 +334,13 @@ def handleUserInput(line):
         print("Sending E-Stop command...")
         sendCommand(COMMAND_ESTOP, data=b'This is a debug message')
     elif line == 'c':
+        print()
         handleColorCommand()
     elif line == 'p':
+        print()
         handleCameraCommand()
     elif line == 'l':
+        print()
         handleLidarCommand()
     elif line in ['w', 'a', 's', 'd', 'x', '+', '-']:
         handleMoveCommand(line)
@@ -327,31 +350,78 @@ def handleUserInput(line):
 
 def runCommandInterface():
     """
-    Main command loop.
-
-    Uses select.select() to simultaneously receive packets from the Arduino
-    and read typed user input from stdin without either blocking the other.
+    Real-time command loop with continuous keypress handling.
+    Movement keys (w/a/s/d) are continuous.
+    Other commands are one-shot.
     """
-    print("Sensor interface ready. Type e / c / p / l / w / a / s / d / x / + / - and press Enter.")
+
+    print("Sensor interface ready.")
+    print("Controls: w/a/s/d = move (hold), x = stop, c = color, p = camera, e = E-stop")
     print("Press Ctrl+C to exit.\n")
 
+    last_move_key = None
+    last_key_time = time.time()
+    KEY_TIMEOUT = 0.2  # seconds before auto-stop
+
     while True:
+        # --- 1. Handle incoming Arduino packets ---
         if _ser.in_waiting >= FRAME_SIZE:
             pkt = receiveFrame()
             if pkt:
                 printPacket(pkt)
-                relay.onPacketReceived(packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params']))
+                relay.onPacketReceived(
+                    packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params'])
+                )
 
-        rlist, _, _ = select.select([sys.stdin], [], [], 0)
-        if rlist:
-            line = sys.stdin.readline().strip().lower()
-            if not line:
-                time.sleep(0.05)
-                continue
-            handleUserInput(line)
+        # --- 2. Read key (non-blocking, single char) ---
+        key = getKey()
+
+        if key:
+            key = key.lower()
+            if key == '\x03':  # Ctrl+C
+                raise KeyboardInterrupt
+            print(f"\rKey pressed: '{key}'   \n", end='', flush=True)
+            # --- Continuous movement keys ---
+            if key in ['w', 'a', 's', 'd']:
+                if key != last_move_key:
+                    handleMoveCommand(key)
+                    last_move_key = key
+                last_key_time = time.time()
+
+            # --- Immediate stop ---
+            elif key == 'x':
+                handleMoveCommand('x')
+                last_move_key = None
+
+            # --- One-shot commands ---
+            elif key == 'e':
+                print("Sending E-Stop command...")
+                sendCommand(COMMAND_ESTOP)
+
+            elif key == 'c':
+                handleColorCommand()
+
+            elif key == 'p':
+                handleCameraCommand()
+
+            elif key == 'l':
+                handleLidarCommand()  # (you can later replace with SLAM trigger)
+
+            elif key in ['+', '-']:
+                handleMoveCommand(key)
+
+            else:
+                print(f"Unknown input: '{key}'")
+
+        # --- 3. Detect key release (auto-stop) ---
+        if last_move_key and (time.time() - last_key_time > KEY_TIMEOUT):
+            handleMoveCommand('x')
+            last_move_key = None
+
+        # --- 4. Handle second terminal relay ---
         relay.checkSecondTerminal(_ser)
-        time.sleep(0.05)
 
+        time.sleep(0.02)
 
 # ----------------------------------------------------------------
 # MAIN
@@ -360,12 +430,14 @@ def runCommandInterface():
 if __name__ == '__main__':
     openSerial()
     relay.start()
+    enableRawMode()
     try:
         runCommandInterface()
     except KeyboardInterrupt:
         print("\nExiting.")
     finally:
         # TODO (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
+        disableRawMode()
         closeSerial()
         cameraClose(_camera)
         relay.shutdown()
