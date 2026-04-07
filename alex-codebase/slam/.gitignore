@@ -1,0 +1,5 @@
+catkin_ws/src/rplidar_ros/
+catkin_ws/src/hector_slam/
+catkin_ws/build/
+catkin_ws/devel/
+catkin_ws/logs/
