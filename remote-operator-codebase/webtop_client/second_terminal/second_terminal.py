@@ -232,32 +232,6 @@ def _handleInput(line: str, client: TCPClient):
 
         sendTPacketFrame(client.sock, frame)
         print(f"[second_terminal] Sent: ARM command with data '{line}'")
-    elif line == 'u':
-        params = [0] * PARAMS_COUNT
-        params[0] = 170
-        joint = 'S'
-        frame = _packFrame(
-            PACKET_TYPE_COMMAND,
-            COMMAND_ARM,
-            data=joint.encode('ascii'),
-            params=params
-        )
-
-        sendTPacketFrame(client.sock, frame)
-        print(f"[second_terminal] Sent: ARM command with data '{line}'")
-    elif line == 'd':
-        params = [0] * PARAMS_COUNT
-        params[0] = 130
-        joint = 'S'
-        frame = _packFrame(
-            PACKET_TYPE_COMMAND,
-            COMMAND_ARM,
-            data=joint.encode('ascii'),
-            params=params
-        )
-
-        sendTPacketFrame(client.sock, frame)
-        print(f"[second_terminal] Sent: ARM command with data '{line}'")
 
     elif robotArmCommand(line):
         joint = line[0].upper()
