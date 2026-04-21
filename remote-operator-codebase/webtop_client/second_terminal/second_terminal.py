@@ -180,7 +180,7 @@ def _printPacket(pkt):
 # Input handling
 # ---------------------------------------------------------------------------
 def robotArmCommand(line: str):
-    if (line != 'H' and len(line) != 4) or line[0].upper() not in 'HVBESG' or int(line[1:]) < 0:
+    if (line.upper() != 'H' and len(line) != 4) or line[0].upper() not in 'HVBESG' or int(line[1:]) < 0:
         return False
     return True
 
