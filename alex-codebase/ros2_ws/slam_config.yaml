@@ -1,6 +1,7 @@
 slam_toolbox:
   ros__parameters:
 
+    # Solver configuration for optimization
     solver_plugin: solver_plugins::CeresSolver
     ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
     ceres_preconditioner: SCHUR_JACOBI
@@ -8,15 +9,18 @@ slam_toolbox:
     ceres_dogleg_type: TRADITIONAL_DOGLEG
     ceres_loss_function_type: None
 
+    # Frame definitions
     odom_frame: base_link
     map_frame: map
     base_frame: base_link
     scan_topic: /scan
-    mode: mapping
+    mode: mapping  # SLAM mode: mapping for building map
 
+    # Scan matching settings
     use_scan_matching: true
     use_scan_barycenter: true
 
+    # Minimum thresholds for processing scans
     minimum_travel_distance: 0.0
     minimum_travel_heading: 0.0
     minimum_time_interval: 0.0
@@ -24,21 +28,26 @@ slam_toolbox:
     minimum_score: 0.0
     link_match_minimum_response_fine: 0.0
 
+    # Scan matching search parameters
     scan_matching_search_radius: 0.3
     scan_matching_search_angle_offset: 0.2
 
+    # Update intervals and timeouts
     map_update_interval: 0.5
     transform_timeout: 1.0
     tf_buffer_duration: 30.0
 
+    # Map resolution and laser range
     resolution: 0.03     
     max_laser_range: 6.0
 
+    # Loop closure settings
     do_loop_closing: true
     loop_search_maximum_distance: 3.0
     loop_match_minimum_chain_size: 5
     loop_match_minimum_response_coarse: 0.2
     loop_match_minimum_response_fine: 0.4
 
+    # Performance settings
     stack_size_to_use: 40000000
     throttle_scans: 1

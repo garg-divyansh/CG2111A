@@ -1,5 +1,4 @@
-/*
- * packets.h
+/* packets.h
  *
  * TPacket protocol: enums, struct, and framing constants.
  * This file must be kept in sync with the constants in pi_sensor.py.

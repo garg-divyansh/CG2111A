@@ -168,6 +168,7 @@ def _printPacket(pkt):
             print(f"[robot] Debug: {debug}")
 
     elif ptype == PACKET_TYPE_MESSAGE:
+        # Handle message packets from the robot
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
         print(f"[robot] Message: {msg}")
 
@@ -190,12 +191,14 @@ def _handleInput(line: str, client: TCPClient):
         return
 
     if line == 'e':
+        # Send E-Stop command with demo text
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_ESTOP,
                            data=TCPDUMP_DEMO_TEXT)
         sendTPacketFrame(client.sock, frame)
         print("[second_terminal] Sent: E-STOP with demo text 'secret information'")
     
     elif line == 'r':
+        # Send E-Stop release command
         frame = _packFrame(PACKET_TYPE_COMMAND, COMMAND_RELEASE,
                            data=TCPDUMP_DEMO_TEXT)
         sendTPacketFrame(client.sock, frame)
@@ -205,6 +208,7 @@ def _handleInput(line: str, client: TCPClient):
         print("[second_terminal] Quitting.")
         raise KeyboardInterrupt
     elif line == 'c':
+        # Send gripper close command
         if _estop_active:
             print("[second_terminal] Cannot send ARM command: E-Stop is active")
             return
@@ -222,6 +226,7 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Sent: ARM command with data '{line}'")
     
     elif line == 'o':
+        # Send gripper open command
         if _estop_active:
             print("[second_terminal] Cannot send ARM command: E-Stop is active")
             return
@@ -239,6 +244,7 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Sent: ARM command with data '{line}'")
 
     elif robotArmCommand(line):
+        # Send general robot arm command
         if _estop_active:
             print("[second_terminal] Cannot send ARM command: E-Stop is active")
             return
@@ -283,6 +289,7 @@ def _receiver_loop(client: TCPClient):
 
 
 def _make_client_ssl_context():
+    """Create and configure SSL context for secure connection."""
     if not TLS_CERT_PATH.is_file():
         print(f"[second_terminal] ERROR: TLS certificate not found at '{TLS_CERT_PATH}'.")
         print("  From ~/cg2111a_tls/webtop_client, create certs/ and copy server.crt first.")
@@ -298,6 +305,7 @@ def _make_client_ssl_context():
 
 def run():
     _shutdown.clear()
+    # Create SSL context if TLS is enabled
     ssl_ctx = _make_client_ssl_context() if TLS_ENABLED else None
     client = TCPClient(
         host=PI_HOST,
@@ -317,6 +325,7 @@ def run():
     print("[second_terminal] Commands:  e = E-Stop   q = quit")
     print("[second_terminal] Incoming robot packets will be printed below.\n")
 
+    # Start receiver thread for incoming packets
     rx_thread = threading.Thread(target=_receiver_loop, args=(client,), daemon=True)
     rx_thread.start()
 

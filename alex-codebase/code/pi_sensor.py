@@ -25,9 +25,11 @@ _fd = sys.stdin.fileno()
 _old_settings = termios.tcgetattr(_fd)
 
 def enableRawMode():
+    """Enable raw mode for stdin to read single characters without buffering."""
     tty.setcbreak(_fd)
 
 def disableRawMode():
+    """Restore original terminal settings."""
     termios.tcsetattr(_fd, termios.TCSADRAIN, _old_settings)
 
 atexit.register(disableRawMode)
@@ -112,6 +114,7 @@ def receiveFrame():
     MAGIC_LO = MAGIC[1]
 
     while True:
+        # Synchronize to the start of a frame by finding the magic bytes
         # Read and discard bytes until we see the first magic byte.
         b = _ser.read(1)
         if not b:
@@ -158,7 +161,7 @@ def sendCommand(commandType, data=b'', params=None):
 # E-STOP STATE
 # ----------------------------------------------------------------
 
-_estop_state = STATE_RUNNING
+_estop_state = STATE_RUNNING  # Current E-Stop state: STATE_RUNNING or STATE_STOPPED
 
 
 def isEstopActive():
@@ -198,6 +201,7 @@ def printPacket(pkt):
             red = pkt['params'][0]
             green = pkt['params'][1]
             blue = pkt['params'][2]
+            # Determine the dominant color based on frequency values
             if red > green and red > blue:
                 print("Detected color: RED")
             elif green > red and green > blue:
@@ -214,6 +218,7 @@ def printPacket(pkt):
             print(f"Arduino debug: {debug}")
 
     elif ptype == PACKET_TYPE_MESSAGE:
+        # Handle message packets from Arduino
         msg = pkt['data'].rstrip(b'\x00').decode('ascii', errors='replace')
         print(f"Arduino: {msg}")
     else:
@@ -306,7 +311,7 @@ def runCommandInterface():
     KEY_TIMEOUT = 0.2  # seconds before auto-stop
 
     while True:
-        # --- 1. Handle incoming Arduino packets ---
+        # 1. Handle incoming Arduino packets
         if _ser.in_waiting >= FRAME_SIZE:
             pkt = receiveFrame()
             if pkt:
@@ -315,7 +320,7 @@ def runCommandInterface():
                     packFrame(pkt['packetType'], pkt['command'], pkt['data'], pkt['params'])
                 )
 
-        # --- 2. Read key (non-blocking, single char) ---
+        # 2. Read key (non-blocking, single char)
         key = getKey()
 
         if key:
@@ -323,19 +328,19 @@ def runCommandInterface():
             if key == '\x03':  # Ctrl+C
                 raise KeyboardInterrupt
             print(f"\rKey pressed: '{key}'   \n", end='', flush=True)
-            # --- Continuous movement keys ---
+            # Handle continuous movement keys
             if key in ['w', 'a', 's', 'd']:
                 if key != last_move_key:
                     handleMoveCommand(key)
                     last_move_key = key
                 last_key_time = time.time()
 
-            # --- Immediate stop ---
+            # Immediate stop
             elif key == 'x':
                 handleMoveCommand('x')
                 last_move_key = None
 
-            # --- One-shot commands ---
+            # One-shot commands
             elif key == 'e':
                 print("Sending E-Stop command...")
                 sendCommand(COMMAND_ESTOP)
@@ -356,12 +361,12 @@ def runCommandInterface():
             else:
                 print(f"Unknown input: '{key}'")
 
-        # --- 3. Detect key release (auto-stop) ---
+        # 3. Detect key release (auto-stop)
         if last_move_key and (time.time() - last_key_time > KEY_TIMEOUT):
             handleMoveCommand('x')
             last_move_key = None
 
-        # --- 4. Handle second terminal relay ---
+        # 4. Handle second terminal relay
         relay.checkSecondTerminal(_ser)
 
         time.sleep(0.02)
@@ -371,6 +376,7 @@ def runCommandInterface():
 # ----------------------------------------------------------------
 
 if __name__ == '__main__':
+    # Initialize serial connection, relay, and raw mode, then run the command interface
     openSerial()
     relay.start()
     enableRawMode()

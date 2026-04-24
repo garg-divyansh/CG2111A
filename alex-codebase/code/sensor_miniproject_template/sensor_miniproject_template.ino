@@ -9,13 +9,13 @@
 
 #include "packets.h"
 #include "serial_driver.h"
-static unsigned long lastTime = 0, currTime;
+static unsigned long lastTime = 0, currTime;  // For debouncing E-Stop button
 
-#define THRESHOLD 10
-#define DEFAULT_SPEED 130
+#define THRESHOLD 10  // Debounce threshold in ms
+#define DEFAULT_SPEED 130  // Default motor speed
 
-static int speed = DEFAULT_SPEED;
-static char lastCmd = 'x';
+static int speed = DEFAULT_SPEED;  // Current motor speed
+static char lastCmd = 'x';  // Last movement command
 
 // =============================================================
 // Packet Helpers
@@ -51,24 +51,24 @@ volatile bool   stateChanged = false;
  * E-Stop ISR: Handles button press/release with debouncing.
  * Transitions between RUNNING and STOPPED states.
  */
-volatile static bool flag = false;
-volatile static int count = 0;
+volatile static bool flag = false;  // Flag for release logic
+volatile static int count = 0;  // Count for double-press detection
 ISR(INT3_vect) {
     currTime = millis();
-    if(currTime - lastTime > THRESHOLD)
+    if(currTime - lastTime > THRESHOLD)  // Debounce check
     {
-        bool buttonpressed = (PIND & 0b00001000);
+        bool buttonpressed = (PIND & 0b00001000);  // Check if button is pressed
         if(buttonpressed && buttonState == STATE_RUNNING) {
-            buttonState = STATE_STOPPED;
+            buttonState = STATE_STOPPED;  // Stop on press
             stateChanged = true;
             stop();
             lastCmd = 'x';
             speed = DEFAULT_SPEED;
         }
-        else if(!buttonpressed && buttonState == STATE_STOPPED) {
-            if(count == 1 || flag)
+        else if(!buttonpressed && buttonState == STATE_STOPPED) {  // Release logic
+            if(count == 1 || flag)  // Double press or flag set
             {
-                buttonState = STATE_RUNNING;
+                buttonState = STATE_RUNNING;  // Resume
                 stateChanged = true;
                 count = 0;
                 flag = false;
@@ -76,7 +76,7 @@ ISR(INT3_vect) {
             else
             {
                 stateChanged = false;
-                count++;
+                count++;  // Increment count for double press
             }
         }
         lastTime = currTime;
@@ -100,32 +100,38 @@ ISR(INT3_vect) {
 // s2: pin 24
 // s3: pin 25
 
+// Set color sensor to red mode
 static void redMode() {
     PORTA &= 0b11110011;
 }
 
+// Set color sensor to blue mode
 static void blueMode() {
     PORTA &= 0b11111011;
     PORTA |= 0b00001000;
 }
 
+// Set color sensor to green mode
 static void greenMode() {
     PORTA &= 0b11110011;
     PORTA |= 0b00001100;
 }
-volatile static uint32_t frequencyCounter = 0;
 
+volatile static uint32_t frequencyCounter = 0;  // Counter for frequency measurement
+
+// Measure frequency over 100ms
 static uint32_t getFrequency() {
     frequencyCounter = 0;
-    EIMSK = 0b00001100;
+    EIMSK = 0b00001100;  // Enable INT2 for frequency counting
     unsigned long startTime = millis();
     while(millis() - startTime < 100);  // 100 ms measurement window
-    EIMSK = 0b00001000;
+    EIMSK = 0b00001000;  // Disable INT2
     return (uint32_t)(frequencyCounter) * 10; // Convert to Hz
 }
 
+// Read RGB color channels
 static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
-    PORTA &= 0b11111101;
+    PORTA &= 0b11111101;  // Enable color sensor
     PORTA |= 0b00000001;
     redMode();
     *r = getFrequency();  // red,   in Hz
@@ -135,6 +141,7 @@ static void readColorChannels(uint32_t *r, uint32_t *g, uint32_t *b) {
     *b = getFrequency();  // blue,  in Hz
 }
 
+// ISR for color sensor frequency counting
 ISR(INT2_vect) {
     frequencyCounter += 1;
 }
@@ -159,29 +166,33 @@ ISR(INT2_vect) {
 #define GRIPPER_MIN   80
 #define GRIPPER_MAX   95
 
-char c = '\u0000';
-int basePos = 90, shoulderPos = 90, elbowPos = 90, gripperPos = 90;
-volatile int msPerDeg = 10;
-volatile uint8_t currPin = 0;
+int basePos = 90, shoulderPos = 90, elbowPos = 90, gripperPos = 90;  // Current servo positions
+volatile int msPerDeg = 10;  // Milliseconds per degree for smooth movement
+volatile uint8_t currPin = 0;  // Current servo pin being controlled
 
+// Convert angle to pulse width for servo
 static int angle_to_pulse(int angle) {
   return 1000 + ((long)angle * 4000 / 180);
 }
 
+// Parse a 3-digit string to int
 static int parse3(const String *s) {
   if (!s || s->length() != 3) return -1;
   if (!isDigit(s->charAt(0)) || !isDigit(s->charAt(1)) || !isDigit(s->charAt(2))) return -1;
   return s->toInt();
 }
 
+// Timer ISR for servo pulse start
 ISR(TIMER5_COMPA_vect) {
   if (currPin != 0) PORTB |= currPin;
 }
 
+// Timer ISR for servo pulse end
 ISR(TIMER5_COMPB_vect) {
   if (currPin != 0) PORTB &= ~currPin;
 }
 
+// Smoothly move servo to target angle
 static void moveSmooth(uint8_t servoPin, int *cur, int target) {
   PORTB &= ~currPin;
   currPin = servoPin;
@@ -212,6 +223,7 @@ static void moveSmooth(uint8_t servoPin, int *cur, int target) {
   *cur = target;
 }
 
+// Home all servos to 90 degrees
 static void homeAll() {
   moveSmooth(BASE_PIN,     &basePos,     90);
   moveSmooth(SHOULDER_PIN, &shoulderPos, 90);
@@ -219,14 +231,15 @@ static void homeAll() {
   moveSmooth(GRIPPER_PIN,  &gripperPos,  90);
 }
 
+// Handle robot arm commands
 static void robotArmHandler(char joint, int angle) {
     switch(joint) {
-        case 'H': homeAll(); break;
-        case 'V': msPerDeg = constrain(angle, 5, 100); break;
-        case 'B': moveSmooth(BASE_PIN, &basePos, angle); break;
-        case 'S': moveSmooth(SHOULDER_PIN, &shoulderPos, angle); break;
-        case 'E': moveSmooth(ELBOW_PIN, &elbowPos, angle); break;
-        case 'G': moveSmooth(GRIPPER_PIN, &gripperPos, angle); break;
+        case 'H': homeAll(); break;  // Home all
+        case 'V': msPerDeg = constrain(angle, 5, 100); break;  // Set speed
+        case 'B': moveSmooth(BASE_PIN, &basePos, angle); break;  // Base
+        case 'S': moveSmooth(SHOULDER_PIN, &shoulderPos, angle); break;  // Shoulder
+        case 'E': moveSmooth(ELBOW_PIN, &elbowPos, angle); break;  // Elbow
+        case 'G': moveSmooth(GRIPPER_PIN, &gripperPos, angle); break;  // Gripper
     }
 
 }
@@ -243,15 +256,15 @@ static void handleCommand(const TPacket *cmd) {
     if (cmd->packetType != PACKET_TYPE_COMMAND) return;
 
     switch (cmd->command) {
-        case COMMAND_ESTOP:
-            cli();
+        case COMMAND_ESTOP:  // Emergency stop command
+            cli();  // Disable interrupts
             stop();
             lastCmd = 'x';
             speed = DEFAULT_SPEED;
             buttonState  = STATE_STOPPED;
             stateChanged = false;
             flag = true;
-            sei();
+            sei();  // Enable interrupts
             {
                 TPacket pkt;
                 memset(&pkt, 0, sizeof(pkt));
@@ -264,7 +277,7 @@ static void handleCommand(const TPacket *cmd) {
             sendStatus(STATE_STOPPED);
             break;
 
-        case COMMAND_COLOR:
+        case COMMAND_COLOR:  // Color sensor command
         {
             TPacket pkt;
             memset(&pkt, 0, sizeof(pkt));
@@ -275,43 +288,43 @@ static void handleCommand(const TPacket *cmd) {
             sendFrame(&pkt);
             break;
         }
-        case COMMAND_MOVE:
-            if(cmd->data[0] == 'w') {
+        case COMMAND_MOVE:  // Movement command
+            if(cmd->data[0] == 'w') {  // Forward
                 if(lastCmd != 'w') {
                     speed = DEFAULT_SPEED;
                 }
                 forward(speed);
                 lastCmd = 'w';
             }
-            else if(cmd->data[0] == 'a') {
+            else if(cmd->data[0] == 'a') {  // Turn left
                 if(lastCmd != 'a') {
                     speed = 210;
                 }
                 cw(speed);
                 lastCmd = 'a';
             }
-            else if(cmd->data[0] == 's') {
+            else if(cmd->data[0] == 's') {  // Backward
                 if(lastCmd != 's') {
                     speed = DEFAULT_SPEED;
                 }
                 backward(speed);
                 lastCmd = 's';
             }
-            else if(cmd->data[0] == 'd') {
+            else if(cmd->data[0] == 'd') {  // Turn right
                 if(lastCmd != 'd') {
                     speed = 210;
                 }
                 ccw(speed);
                 lastCmd = 'd';
             }
-            else if(cmd->data[0] == 'x') {
+            else if(cmd->data[0] == 'x') {  // Stop
                 stop();
             }
-            else if(cmd->data[0] == '+') {
+            else if(cmd->data[0] == '+') {  // Increase speed
                 speed += 10;
                 speed = constrain(speed, 80, 255);
             }
-            else if(cmd->data[0] == '-') {
+            else if(cmd->data[0] == '-') {  // Decrease speed
                 speed -= 10;
                 speed = constrain(speed, 80, 255);
             }
@@ -325,11 +338,11 @@ static void handleCommand(const TPacket *cmd) {
 
             }
             break;
-        case COMMAND_ARM:
+        case COMMAND_ARM:  // Robot arm command
             robotArmHandler(cmd->data[0], cmd->params[0]);
             break;
 
-        case COMMAND_RELEASE:
+        case COMMAND_RELEASE:  // Release E-Stop
             cli();
             buttonState  = STATE_RUNNING;
             stateChanged = false;
@@ -362,35 +375,36 @@ void setup() {
 #else
     Serial.begin(9600);
 #endif
-    // Configure button pin and interrupt
-    DDRD = 0b00000000;
-    EICRA = 0b01110000;
-    EIMSK = 0b00001000;
+    // Configure button pin and interrupt for E-Stop
+    DDRD = 0b00000000;  // Set PORTD as input
+    EICRA = 0b01110000;  // Rising/falling edge for INT3
+    EIMSK = 0b00001000;  // Enable INT3
 
-    // Configure color sensor pins
-    DDRA = 0b00001111;
-    // Configure robot arm pins
-    DDRB |= 0b00001111;
+    // Configure color sensor pins (PORTA)
+    DDRA = 0b00001111;  // Set lower 4 bits as output
+    // Configure robot arm pins (PORTB)
+    DDRB |= 0b00001111;  // Set lower 4 bits as output
+    // Setup Timer5 for servo control
     TCCR5A = 0;
-    TCCR5B = (1 << WGM52) | (1 << CS51);
-    OCR5A  = 40000;
-    OCR5B  = 3000;
-    TIMSK5 = (1 << OCIE5A) | (1 << OCIE5B);
+    TCCR5B = (1 << WGM52) | (1 << CS51);  // CTC mode, prescaler 8
+    OCR5A  = 40000;  // 20ms period at 16MHz/8
+    OCR5B  = 3000;   // Initial pulse width
+    TIMSK5 = (1 << OCIE5A) | (1 << OCIE5B);  // Enable compare interrupts
 
-    sei();
+    sei();  // Enable global interrupts
 }
 
 void loop() {
-    // Report E-Stop state changes
+    // Report E-Stop state changes to Pi
     if (stateChanged) {
-        cli();
+        cli();  // Disable interrupts temporarily
         TState state = buttonState;
         stateChanged = false;
-        sei();
+        sei();  // Re-enable interrupts
         sendStatus(state);
     }
 
-    // Process incoming commands
+    // Process incoming commands from Pi
     TPacket incoming;
     if (receiveFrame(&incoming)) {
         handleCommand(&incoming);
