@@ -205,6 +205,9 @@ def _handleInput(line: str, client: TCPClient):
         print("[second_terminal] Quitting.")
         raise KeyboardInterrupt
     elif line == 'c':
+        if _estop_active:
+            print("[second_terminal] Cannot send ARM command: E-Stop is active")
+            return
         params = [0] * PARAMS_COUNT
         params[0] = 180
         joint = 'G'
@@ -219,6 +222,9 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Sent: ARM command with data '{line}'")
     
     elif line == 'o':
+        if _estop_active:
+            print("[second_terminal] Cannot send ARM command: E-Stop is active")
+            return
         params = [0] * PARAMS_COUNT
         params[0] = 000
         joint = 'G'
@@ -233,6 +239,9 @@ def _handleInput(line: str, client: TCPClient):
         print(f"[second_terminal] Sent: ARM command with data '{line}'")
 
     elif robotArmCommand(line):
+        if _estop_active:
+            print("[second_terminal] Cannot send ARM command: E-Stop is active")
+            return
         joint = line[0].upper()
         if joint == 'H':
             angle = 0
