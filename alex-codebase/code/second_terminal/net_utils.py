@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Studio 16: Robot Integration
 net_utils.py  -  Network utilities for the second terminal relay.
 
 Provides a minimal, SSL-upgradeable TCP layer used by:

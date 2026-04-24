@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-Studio 17: Transport Layer Security (TLS)
 second_terminal.py  -  Second operator terminal client.
 
 This terminal connects to the second-terminal relay on the Raspberry Pi over

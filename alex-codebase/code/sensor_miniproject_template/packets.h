@@ -1,6 +1,5 @@
 /*
  * packets.h
- * Studio 13: Sensor Mini-Project
  *
  * TPacket protocol: enums, struct, and framing constants.
  * This file must be kept in sync with the constants in pi_sensor.py.
@@ -22,7 +21,6 @@ typedef enum {
 
 typedef enum {
     COMMAND_ESTOP = 0,
-    // TODO (Activity 2): add your own command type for the color sensor
     COMMAND_COLOR = 1,
     COMMAND_MOVE  = 2,
     COMMAND_ARM = 3,
@@ -32,7 +30,6 @@ typedef enum {
 typedef enum {
     RESP_OK     = 0,
     RESP_STATUS = 1,
-    // TODO (Activity 2): add your own response type for the color sensor
     RESP_COLOR = 2,
 } TResponseType;
 

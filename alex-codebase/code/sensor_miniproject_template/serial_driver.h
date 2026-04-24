@@ -1,21 +1,9 @@
 /*
- * serial_driver.h
- * Studio 13: Sensor Mini-Project
- *
  * Serial transport layer and packet framing.
  *
- * USE_BAREMETAL_SERIAL controls which transport path is compiled in:
- *
- *   0 (default) - sendFrame() uses Serial.write() and receiveFrame()
- *                 uses Serial.available() / Serial.read().  The sketch
- *                 works immediately with no further changes needed, so
- *                 you can test the E-Stop and color sensor activities
- *                 before touching the serial driver.
- *
- *   1           - sendFrame() and receiveFrame() use the circular
- *                 tx_buf / rx_buf buffers driven by the four stubs you
- *                 implement in Activity 1.  Change this to 1 once
- *                 txEnqueue(), rxDequeue(), and both ISRs are working.
+ * USE_BAREMETAL_SERIAL controls the transport:
+ *   0 - Uses Arduino Serial library.
+ *   1 - Uses custom circular buffers and ISRs.
  */
 
 #pragma once
@@ -24,19 +12,10 @@
 #include <string.h>
 #include "packets.h"
 
-// =============================================================
-// TODO (Activity 1, step 2): change this to 1 once txEnqueue(),
-// rxDequeue(), and both ISRs are implemented and working.
-// =============================================================
 #define USE_BAREMETAL_SERIAL 1
-
-// =============================================================
-// Circular TX / RX buffers (used when USE_BAREMETAL_SERIAL == 1)
-// =============================================================
 
 #if USE_BAREMETAL_SERIAL
 
-// Power-of-2 sizes allow fast wrap-around with bitwise AND.
 #define TX_BUFFER_SIZE  128
 #define TX_BUFFER_MASK  (TX_BUFFER_SIZE - 1)
 #define RX_BUFFER_SIZE  256
@@ -62,17 +41,9 @@ void usartInit(uint16_t ubrr) {
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00);  // 8 data bits, 1 stop bit
 }
 
-// =============================================================
-// Activity 1, step 1: implement these four stubs
-// =============================================================
-
 /*
- * TODO (Activity 1): Implement txEnqueue().
- *
- * Attempt to copy all `len` bytes from `data` into the circular TX
- * buffer.  If the buffer does not have enough free space, do NOT
- * enqueue anything and return false.  If successful, enable the UDRE
- * interrupt (UDRIE0) and return true.  Must NOT block.
+ * Enqueue data into TX buffer. Returns true if successful, false if no space.
+ * Enables UDRE interrupt on success.
  */
 bool txEnqueue(const uint8_t *data, uint8_t len) {
     // TODO
@@ -86,32 +57,25 @@ bool txEnqueue(const uint8_t *data, uint8_t len) {
         tx_head = (tx_head + 1) & TX_BUFFER_MASK;
     }
 
-    UCSR0B |= 0b00100000; 
+    UCSR0B |= 0b00100000;
     return true;
 }
 
-// TODO (Activity 1): Implement the TX Data Register Empty ISR.
-// Vector: USART0_UDRE_vect
-// Drain one byte from tx_buf into UDR0; when the buffer is empty,
-// clear the UDRIE0 bit to stop the ISR from firing.
+/*
+ * TX Data Register Empty ISR: Send next byte from TX buffer.
+ */
 ISR(USART0_UDRE_vect) {
   UDR0 = tx_buf[tx_tail];
   tx_tail = (tx_tail + 1) & TX_BUFFER_MASK;
   if(tx_tail == tx_head) {
-    UCSR0B &= ~0b00100000; 
+    UCSR0B &= ~0b00100000;
   }
-  // YOUR CODE HERE
 }
 
 /*
- * TODO (Activity 1): Implement rxDequeue().
- *
- * Attempt to copy `len` bytes out of the circular RX buffer into
- * `data`.  If fewer than `len` bytes are available, do NOT copy
- * anything and return false.  Must NOT block.
+ * Dequeue data from RX buffer. Returns true if successful, false if insufficient data.
  */
 bool rxDequeue(uint8_t *data, uint8_t len) {
-    // YOUR CODE HERE
     uint8_t availableBits = (rx_head - rx_tail - 1) & RX_BUFFER_MASK;
     if(availableBits < len) {
         return false;
@@ -123,26 +87,23 @@ bool rxDequeue(uint8_t *data, uint8_t len) {
     return true;
 }
 
-// TODO (Activity 1): Implement the RX Complete ISR.
-// Vector: USART0_RX_vect
-// Read UDR0 immediately.  If the buffer is not full, store the byte
-// and advance the write index; otherwise discard it.
+/*
+ * RX Complete ISR: Store received byte in RX buffer if space available.
+ */
 ISR(USART0_RX_vect) {
-  // YOUR CODE HERE
   uint8_t received = UDR0;
   uint8_t next = (rx_head + 1) & RX_BUFFER_MASK;
   if(next != rx_tail) {
     rx_buf[rx_head] = received;
     rx_head = next;
   }
-
 }
 
 #endif
 
 
 // =============================================================
-// Framing: magic number + XOR checksum (pre-implemented)
+// Framing: magic number + XOR checksum
 // =============================================================
 
 static uint8_t computeChecksum(const uint8_t *data, uint8_t len) {
@@ -152,11 +113,8 @@ static uint8_t computeChecksum(const uint8_t *data, uint8_t len) {
 }
 
 /*
- * Wrap a TPacket in the 103-byte frame and send it.
- *
- * When USE_BAREMETAL_SERIAL == 0: writes directly via Serial.write().
- * When USE_BAREMETAL_SERIAL == 1: enqueues into the circular TX buffer
- * (busy-waits if the buffer is temporarily full).
+ * Send a framed packet.
+ * Uses Serial.write() or TX buffer depending on USE_BAREMETAL_SERIAL.
  */
 static void sendFrame(const TPacket *pkt) {
     uint8_t frame[FRAME_SIZE];
@@ -166,19 +124,16 @@ static void sendFrame(const TPacket *pkt) {
     frame[2 + TPACKET_SIZE] = computeChecksum((const uint8_t *)pkt, TPACKET_SIZE);
 #if USE_BAREMETAL_SERIAL
     while (!txEnqueue(frame, FRAME_SIZE))
-        ;   // wait for TX buffer space
+        ;
 #else
     Serial.write(frame, FRAME_SIZE);
 #endif
 }
 
 /*
- * Try to extract one valid framed packet from incoming bytes.
- * Returns true when a valid packet is stored in *pkt; returns false if
- * there are not enough bytes yet or if a frame fails the checksum.
- *
- * When USE_BAREMETAL_SERIAL == 0: reads from the Arduino Serial buffer.
- * When USE_BAREMETAL_SERIAL == 1: reads from the circular rx_buf buffer.
+ * Receive a framed packet if available.
+ * Returns true if a valid packet is extracted into *pkt.
+ * Uses Serial or RX buffer depending on USE_BAREMETAL_SERIAL.
  */
 static bool receiveFrame(TPacket *pkt) {
 #if USE_BAREMETAL_SERIAL
@@ -211,37 +166,35 @@ static bool receiveFrame(TPacket *pkt) {
         uint8_t byte = (uint8_t)Serial.read();
 
         switch (state) {
-            case 0: // waiting for MAGIC_HI
+            case 0:
                 if (byte == MAGIC_HI) {
                     state = 1;
                 }
                 break;
 
-            case 1: // waiting for MAGIC_LO
+            case 1:
                 if (byte == MAGIC_LO) {
                     state = 2;
                     index = 0;
                 } else if (byte != MAGIC_HI) {
                     state = 0;
                 }
-                // else stay in state 1 if we got another MAGIC_HI
                 break;
 
-            case 2: // reading TPacket payload
+            case 2:
                 raw[index++] = byte;
                 if (index >= TPACKET_SIZE) {
                     state = 3;
                 }
                 break;
 
-            case 3: { // reading checksum
+            case 3: {
                 uint8_t expected = computeChecksum(raw, TPACKET_SIZE);
                 if (byte == expected) {
                     memcpy(pkt, raw, TPACKET_SIZE);
                     state = 0;
                     return true;
                 }
-                // checksum failed; resync
                 state = (byte == MAGIC_HI) ? 1 : 0;
                 break;
             }

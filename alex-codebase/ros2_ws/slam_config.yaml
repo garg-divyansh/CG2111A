@@ -24,7 +24,6 @@ slam_toolbox:
     minimum_score: 0.0
     link_match_minimum_response_fine: 0.0
 
-    # Tighter search window — prevents sudden jumps
     scan_matching_search_radius: 0.3
     scan_matching_search_angle_offset: 0.2
 
@@ -32,10 +31,9 @@ slam_toolbox:
     transform_timeout: 1.0
     tf_buffer_duration: 30.0
 
-    resolution: 0.03          # finer cells = better wall distinction
+    resolution: 0.03     
     max_laser_range: 6.0
 
-    # Loop closure — corrects drift when you revisit areas
     do_loop_closing: true
     loop_search_maximum_distance: 3.0
     loop_match_minimum_chain_size: 5

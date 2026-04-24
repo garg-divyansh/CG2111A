@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 """
-Studio 13: Sensor Mini-Project
-Raspberry Pi Sensor Interface — pi_sensor.py
+Raspberry Pi Sensor Interface.
 
-Extends the communication framework from Studio 12 with:
-  - Magic number + checksum framing for reliable packet delivery
-  - A command-line interface that reads user commands while displaying
-    live Arduino data
-
-Packet framing format (103 bytes total):
-  MAGIC (2 B) | TPacket (100 B) | CHECKSUM (1 B)
+Provides reliable packet communication with Arduino and a CLI for user commands.
+Packet format: MAGIC (2B) | TPacket (100B) | CHECKSUM (1B)
 
 Usage:
   source env/bin/activate
@@ -62,14 +56,6 @@ def closeSerial():
     global _ser
     if _ser and _ser.is_open:
         _ser.close()
-
-
-# ----------------------------------------------------------------
-# TPACKET CONSTANTS
-# (must match sensor_miniproject_template.ino)
-# ----------------------------------------------------------------
-
-
 
 
 def computeChecksum(data: bytes) -> int:
@@ -219,9 +205,6 @@ def printPacket(pkt):
             elif blue > red and blue > green:
                 print("Detected color: BLUE")
         else:
-            # TODO (Activity 2): add an elif branch here to handle your color
-            # response.  Display the three channel frequencies in Hz, e.g.:
-            #   R: <params[0]> Hz, G: <params[1]> Hz, B: <params[2]> Hz
             print(f"Response: unknown command {cmd}")
         # Print the optional debug string from the data field.
         # On the Arduino side, fill pkt.data before calling sendFrame() to
@@ -238,13 +221,11 @@ def printPacket(pkt):
 
 
 # ----------------------------------------------------------------
-# ACTIVITY 2: COLOR SENSOR
+# COLOR SENSOR
 # ----------------------------------------------------------------
 
 def handleColorCommand():
     """
-    TODO (Activity 2): request a color reading from the Arduino and display it.
-
     Check the E-Stop state first; if stopped, refuse with a clear message.
     Otherwise, send your color command to the Arduino.
     """
@@ -256,21 +237,18 @@ def handleColorCommand():
 
 
 # ----------------------------------------------------------------
-# ACTIVITY 3: CAMERA
+# CAMERA
 # ----------------------------------------------------------------
 
-# TODO (Activity 3): import the camera library provided (alex_camera.py).
 from alex_camera import cameraOpen, cameraClose, captureGreyscaleFrame, renderGreyscaleFrame
-_camera = cameraOpen()          # TODO (Activity 3): open the camera (cameraOpen()) before first use.
+_camera = cameraOpen()
 _frames_remaining = 15   # frames remaining before further captures are refused
 
 
 def handleCameraCommand():
     """
-    TODO (Activity 3): capture and display a greyscale frame.
-
-    Gate on E-Stop state and the remaining frame count.
-    Use captureGreyscaleFrame() and renderGreyscaleFrame() from alex_camera.
+    Capture and display a greyscale frame.
+    Gates on E-Stop and frame count.
     """
     if isEstopActive():
         print("Refused: E-Stop is active.")
@@ -285,40 +263,19 @@ def handleCameraCommand():
     renderGreyscaleFrame(frame)
     _frames_remaining -= 1
     print(f"Frames remaining: {_frames_remaining}")
-    
-
-
-# ----------------------------------------------------------------
-# ACTIVITY 4: LIDAR
-# ----------------------------------------------------------------
-
-# TODO (Activity 4): import from lidar.alex_lidar and lidar_example_cli_plot
-#   (lidar_example_cli_plot.py is in the same folder; alex_lidar.py is in lidar/).
-from lidar_example_cli_plot import plot_single_scan
-
-def handleLidarCommand():
-    """
-    TODO (Activity 4): perform a single LIDAR scan and render it.
-
-    Gate on E-Stop state, then use the LIDAR library to capture one scan
-    and the CLI plot helpers to display it.
-    """
-    if isEstopActive():
-        print("Refused: E-Stop is active.")
-        return
-    
-    plot_single_scan()
 
 
 # ----------------------------------------------------------------
 # COMMAND-LINE INTERFACE
 # ----------------------------------------------------------------
 
-# User input -> action mapping:
-#   e  send a software E-Stop command to the Arduino (pre-wired)
-#   c  request color reading from the Arduino        (Activity 2 - implement yourself)
-#   p  capture and display a camera frame            (Activity 3 - implement yourself)
-#   l  perform a single LIDAR scan                   (Activity 4 - implement yourself)
+# Key mappings:
+#   e  send E-Stop command
+#   c  request color reading
+#   p  capture camera frame
+#   w/a/s/d  move (continuous)
+#   x  stop movement
+#   + -  adjust something
 
 def handleMoveCommand(line):
     if isEstopActive():
@@ -331,30 +288,6 @@ def getKey():
     if rlist:
         return sys.stdin.read(1)
     return None
-
-def handleUserInput(line):
-    """
-    Dispatch a single line of user input.
-
-    The 'e' case is pre-wired to send a software E-Stop command.
-    TODO (Activities 2, 3 & 4): add 'c' (color), 'p' (camera) and 'l' (LIDAR).
-    """
-    if line == 'e':
-        print("Sending E-Stop command...")
-        sendCommand(COMMAND_ESTOP, data=b'This is a debug message')
-    elif line == 'c':
-        print()
-        handleColorCommand()
-    elif line == 'p':
-        print()
-        handleCameraCommand()
-    elif line == 'l':
-        print()
-        handleLidarCommand()
-    elif line in ['w', 'a', 's', 'd', 'x', '+', '-']:
-        handleMoveCommand(line)
-    else:
-        print(f"Unknown input: '{line}'. Valid: e, c, p, l, w, a, s, d, x, +, -")
 
 
 def runCommandInterface():
@@ -417,9 +350,6 @@ def runCommandInterface():
             elif key == 'p':
                 handleCameraCommand()
 
-            elif key == 'l':
-                handleLidarCommand()  # (you can later replace with SLAM trigger)
-
             elif key in ['+', '-']:
                 handleMoveCommand(key)
 
@@ -449,7 +379,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("\nExiting.")
     finally:
-        # TODO (Activities 3 & 4): close the camera and disconnect the LIDAR here if you opened them.
         disableRawMode()
         closeSerial()
         cameraClose(_camera)
